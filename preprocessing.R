@@ -9,6 +9,9 @@ rem_spec_char = function(x) {
 }
 
 # function to remove stopwords
+stop = read.table("stop.txt", header = TRUE)
+stop_vec = as.vector(stop$CUSTOM_STOP_WORDS)
+my_stop_words = tibble(as.vector(stop$CUSTOM_STOP_WORDS), lexicon = "SMART")
 
 # function to stem words
 stem_hunspell <- function(term) {
@@ -36,10 +39,16 @@ test = test %>%
 test = test %>% 
   mutate(test_col3 = text_tokens(test_col2, stemmer = stem_hunspell))
 
-text <- "Though I have been holding out for your trust"
-text_tokens(text, stemmer = stem_hunspell)
+text = "Hey you are awesome. This is dope. I like you."
+all_stop_words = stop_words %>% 
+  bind_rows(my_stop_words)
 
+no_numbers = test %>% 
+  
 
+no_stop_words = test %>% 
+  select(test_col2) %>% 
+  anti_join(all_stop_words, by = 'word')
 
 
 

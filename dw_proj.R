@@ -5,6 +5,7 @@ install.packages('tidytext')
 install.packages('rvest')
 install.packages('textclean')
 install.packages('corpus')
+install.packages('tm')
 
 # loading libraries
 library(dplyr)
@@ -16,6 +17,8 @@ library(xml2)
 library(textclean)
 library(hunspell)
 library(corpus)
+library(stopwords)
+library(tm)
 
 # installing dev version geniusr package
 devtools::install_github("ewenme/geniusr")
