@@ -23,7 +23,7 @@ devtools::install_github("ewenme/geniusr")
 ## Setting genius api token to environment variables
 geniusr::genius_token()
 
-## Client Access Token: vciculsV3odkYWtnlTeQhoxnTPaSfWPA8mifBhCbCIMMIL5CeEkB9BwoOCH4Ql6T
+
 
 ## loading geniusr
 library(geniusr)
