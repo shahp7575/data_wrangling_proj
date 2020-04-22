@@ -1,0 +1,5 @@
+References:
+
+Removing special chars: https://intellipaat.com/community/15034/remove-all-special-characters-from-a-string-in-r
+
+Stemmer: https://cran.r-project.org/web/packages/corpus/vignettes/stemmer.html

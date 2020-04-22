@@ -3,6 +3,8 @@ install.packages('dplyr')
 install.packages('devtools')
 install.packages('tidytext')
 install.packages('rvest')
+install.packages('textclean')
+install.packages('corpus')
 
 # loading libraries
 library(dplyr)
@@ -11,12 +13,17 @@ library(tidytext)
 library(rvest)
 library(stringr)
 library(xml2)
+library(textclean)
+library(hunspell)
+library(corpus)
 
 # installing dev version geniusr package
 devtools::install_github("ewenme/geniusr")
 
 ## Setting genius api token to environment variables
 geniusr::genius_token()
+
+## Client Access Token: vciculsV3odkYWtnlTeQhoxnTPaSfWPA8mifBhCbCIMMIL5CeEkB9BwoOCH4Ql6T
 
 ## loading geniusr
 library(geniusr)
