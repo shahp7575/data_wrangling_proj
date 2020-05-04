@@ -1,0 +1,403 @@
+---
+title: "Data Wrangling Project"
+author: "Parth Shah"
+date: "5/4/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Data Wrangling Project
+*Parth Shah: 191004265*
+
+## Introduction
+Most music listeners enjoy a song because of a catchy beat or a hook. As a music lover myself I like to focus on the lyrics and the meaning behind the song as well. Lyrics that a songwriter puts into their music are a form of expression. The sole purpose is to get what’s on their mind or heart onto paper. 
+
+This project scrapes, manipulates and analyzes the lyrics of Jeremy Zucker. He is an American singer-songwriter, best known for his songs "all the kids are depressed" and "comethru", having accumulated over 300 million streams on Spotify. His music is described as "a fusion of organic airy beats, lush soundtrack-style soundscapes, and biting tumblr-worthy lyricism".
+
+The project has been managed with Github for version control. It can be cloned via https://github.com/shahp7575/data_wrangling_proj.git. 
+
+## Libraries Used
+The project uses multiple libraries for basic text manipulation, preprocessing and visualization. Few of the most useful libraries are listed below:
+
+- *geniusr:* Genius API library for data collection
+
+- *tm:* To create a text corpus, clean data and document-term matrix
+
+- *SnowballC* For word stemming
+
+- *RWeka* Using the ngrams() feature to construct custom Bigram and Trigram tokenizers.
+
+```{r include = FALSE}
+library(dplyr)
+library(devtools)
+library(wordcloud)
+library(tidytext)
+library(SnowballC)
+library(ggplot2)
+library(rvest)
+library(stringr)
+library(xml2)
+library(textclean)
+library(knitr)
+library(hunspell)
+library(corpus)
+library(stopwords)
+library(tm)
+library(RWeka)
+```
+
+## Data Collection
+**Genius** is an American digital company which holds the world's biggest collection of song lyrics and musical knowledge. Genius provides an API to collect data about lyrics by *artist, album, date etc.* The API supports both Python(*lyricsgenius*) as well as R(*geniusr*). 
+
+### Getting the API
+Getting the API through Genius is pretty straightforward. After logging in their API Client Management Page we can create an API Client for our application. This will provide us with a *client_id* and a *client_secret* that can be used for data collection.
+
+```{r include=FALSE}
+# installing dev version geniusr package
+#devtools::install_github("ewenme/geniusr")
+
+## Setting genius api token to environment variables
+#geniusr::genius_token()
+
+## loading geniusr
+library(geniusr)
+
+```
+
+### Experimenting with the API
+
+If we want to find a list of all artists starting with a particular name we can utilize the API's built-in *search_artist()* function. The function takes an argument *search_term* where we can pass the required artist name. A search for artist "Jeremy" was done and it provides us with a list of matching artists and their respective *artist_id*.
+
+```{r echo=FALSE}
+search_artist(search_term = 'Jeremy')
+```
+
+As we can see the *artist_id* for Jeremy Zucker is 398381. We can use that *artist_id* in another API function *get_artist_songs_df()*. This function takes an argument *artist_id* where we can pass the found ID and it gives us a list of songs by that artist along with their respective *song_id*.
+
+```{r echo=FALSE}
+get_artist_songs_df(artist_id = "398381")
+```
+
+The *song_id* obtained above can be used to get the lyrics of a particular song using the *get_lyrics_id()* function and passing the *song_id* as an argument. *df_songid = get_lyrics_id(song_id = id)*
+
+### Final Data Collection Function
+In order to combine all the process into one and simplify the data collection process, a custom function *get_song_lyrics()* has been created. This function takes *artist_id* as an argument and with the help of the functions discussed above, it generates a dataframe with *lyrics, section_name, song_id, album_name, artist_name*. 
+
+The function takes the following steps:
+
+- Get the artist ID.
+- Get the artist's respective song IDs.
+- Convert all song names to lowercase with the help of *tolower()* function.
+- Some songs in the data also include remixes, stripped or live version. They do sound different, however, their lyrics will be the same. So in order to remove duplicate lyrics, the function with the help of *grep* removes all songs that have the following strings in the song names: *stripped, live, remix*. 
+- Loop through all song_ids and get their respective song lyrics.
+- Combine all the information into one single data frame with the help of *rbind()* commnand.
+
+```{r echo=FALSE}
+get_song_lyrics = function(art_id) {
+  
+  # data frame of artist id
+  df_artist_id = get_artist_songs_df(artist_id = art_id)
+  
+  # remove rows with unwanted songs -> (remix, stripped., live)
+  df_artist_id$song_name = tolower(df_artist_id$song_name)
+  unwanted_str = c("stripped", "live", "remix")
+  for(st in unwanted_str) {
+    df_artist_id = df_artist_id[- grep(st, df_artist_id$song_name), ]
+  }
+  
+  # get all song ids
+  songids = df_artist_id$song_id
+  res_lyrics = data.frame()
+  
+  for(id in songids) {
+    df_songid = get_lyrics_id(song_id = id)
+    res_lyrics = rbind(res_lyrics, df_songid)
+  }
+  
+  return(res_lyrics)
+}
+
+# get final data from the function
+df_songs = get_song_lyrics(art_id = '398381')
+head(df_songs)
+```
+
+## Preprocessing
+Textual data comes in all formats. Based on the domain of the project, the cleaning or preprocessing of the text may be different. For example, if we are trying to discover commonly used words in a news dataset and our pre-processing steps involve removing stop words because some other project uses it as well, then we are probably going to miss out on some of the common words as we have ALREADY eliminated it. So it's really not a one-size-fits-all approach.
+
+The textual data in our data frame is the lyrics of the songs. A quick glance at the lyrics show multiple things that needs to be cleaned and preprocessed in order to make the data into a more readable and analyzable format.
+
+Two different packages were experimented for cleaning processes:
+
+- **tidytext**
+- **tm**
+
+This project implements the following steps for pre-processing:
+
+### Contractions
+Most of the songs use words like *can't, weren't, won't etc..* These words if are splitted into two separate words -> *can not, were not, will not etc..* then they would add more meaning to the corpus of vocabulary created. 
+
+The implementation of this approach started with creating a *contractions.txt* file and adding few words into it. Then with the help of *gsub* if a matching word is found then it gets splitted by looking up the *contractions.txt* file. Even though this approach worked, but because of the massive number of such words it was practically impossible to find each and every word and add it to the .txt file. 
+
+Hence the function *replace_contractions()* in the package *textclean* was used that given a string returns the vector with contractions replaced. The function is then used to create a separate column *corp* in the dataframe.
+
+```{r echo=FALSE}
+# applyting contractions
+contractions = function(x) {
+  return(replace_contraction(x))
+}
+
+df_songs = df_songs %>% 
+  mutate(corp = contractions(df_songs$line))
+
+print("I won't. I can't. I shouldn't")
+replace_contraction("I won't. I can't. I shouldn't")
+```
+
+### Corpus
+Corpus is a collection of documents containing text. A corpus can have two types of metadata (accessible via meta). Corpus metadata contains corpus specific metadata in form of tag-value pairs. Document level metadata contains document specific metadata but is stored in the corpus as a data frame. Document level metadata is typically used for semantic reasons (e.g., classifications of documents form an own entity due to some high-level information like the range of possible values) or for performance reasons (single access instead of extracting metadata of each document).
+
+A corpus of *corp* column is created utilizing the in-built *Corpus()* function.
+
+```{r include=FALSE}
+# creating corpus
+corpus = Corpus(VectorSource(df_songs$corp))
+```
+
+### Removing Numbers
+Song lyrics are not likely to have a numeric character, but as a precaution this step has been taken. It utilizes the *removeNumbers* with the *tm_map()* function.
+
+```{r include=FALSE}
+# Removing numbers if present
+corpus = tm_map(corpus, removeNumbers)
+```
+
+### Remove Special Characters
+Textual data can have special characters such as *-/@ etc..*. Such characters make up noise in the corpus and don't add any value to the data. So such characters are removed using  *removePunctuation*.
+
+```{r include=FALSE}
+# remove special characters
+corpus = tm_map(corpus, removePunctuation)
+```
+
+### Remove Whitespaces
+Some textual data can have irrelevant white spaces. While some may get generated after implementing the above two steps, as they replace the character with a whitespace. Such whitespace needs to be removed to get better clean data. It utilizes *striWhiteSpace* from the *tm* package.
+
+```{r include=FALSE}
+# strip whitespace
+corpus = tm_map(corpus, stripWhitespace)
+```
+
+### Convert to lowercase
+When word frequencies are calculated, they might be case-sensitive. For example, it may treat *Cat* and *cat* as two different words. To prevent that from happening all the text is converted to lowercase.
+
+```{r include=FALSE}
+# lowercase
+corpus = tm_map(corpus, content_transformer(tolower))
+```
+
+### Remove Stopwords
+To better understand the words used in a corpus it is crucial to remove basic words such as *the, of, and*. These stopwords are removed using *removeWords* from *tm* package. 
+
+The *tm* package already comes with a prebuilt vector of *stopwords*. Few custom stop words are added to the vector as well.
+
+```{r include=FALSE}
+# function to remove stopwords
+stop = read.table("stop.txt", header = TRUE)
+stop = as.character(stop$CUSTOM_STOP_WORDS)
+stop = c(stopwords("english"), stop)
+```
+
+```{r include=FALSE}
+# remove stopwords
+corpus = tm_map(corpus, removeWords, stop)
+corpus = tm_map(corpus, stripWhitespace)
+```
+
+### Stemming
+Stemming a word strips a particular word to its root word. For example: *bringing -> bring, eating -> eat*. This is the idea of reducing different forms of a word to a core root. Words that are derived from one another can be mapped to a central word or symbol, especially if they have the same core meaning.
+
+This could be useful in many ways:
+
+- If we are trying to analyze word usage in a corpus and wish to condense related words so that we don’t have as much variability.
+- Maybe used in an information retrieval setting and we want to boost our algorithm’s recall.
+
+There are different types of stemmers available based on the requirements. This project uses the *Snowball Stemmer*.
+
+```{r include=FALSE}
+# stemming
+corpus = tm_map(corpus, stemDocument)
+```
+
+
+
+## Document-Term Matrix
+Document Term Matrix is tracking the term frequency for each term by each document. It starts with the Bag of Words representation of the documents and then for each document, it tracks the number of times a term exists. In simple words, it creates a numerical representation of the documents in our corpus. 
+
+It helps us to calculate aggregates and basic statistics such as average term count, mean, median, mode, variance and standard deviation of the length of the documents. We can also tell which terms are more frequent in the collection of documents and can use that information to determine which terms more likely “represent” the document.
+
+This project uses the *DocumentTermMatrix* function of *tm* package. The argument that is passed to the function is the corpus of words created before.
+
+```{r echo=FALSE}
+# doc-term matrix
+tdm = DocumentTermMatrix(corpus)
+inspect(tdm)
+```
+
+This document-term matrix can be used now to find words that have certain frequency. For instance, below is the output of all the words used by Jeremy Zucker over 100 times.
+
+```{r echo=FALSE}
+findFreqTerms(tdm, 100)
+```
+
+We can also sum all the frequencies by column and find the most frequent words used by Jeremy Zucker. Usually, the words expected to see would be *a, the, of etc..*. But as we removed the *stopwords* before, we see words that have more meaning.
+
+```{r echo=FALSE}
+# Sum all columns(words) to get frequency
+words_frequency <- colSums(as.matrix(tdm)) 
+# create sort order (descending) for matrix
+ord <- order(words_frequency, decreasing=TRUE)
+words_frequency[head(ord, 10)] %>% kable()
+```
+
+
+## Visualization
+Data can convey more information once it is plotted. This plots use the *ggplot* and the *wordcloud* packages.
+
+### Plotting song length by song title
+Plotting the number of words used by an artist can give more information about the song such as whether the song uses more words, more music, or to find if the songs are short or long in time.
+
+To find the lenght of each song, the song lyrics are splitted by an empty space " ", and then using the *length()* number of words are calculated. Then with the help of *dplyr* package the data is grouped by *song_name* and summarized. The final output is converted to a data frame and a simple bar plot is plotted.
+
+```{r echo=FALSE}
+# plot Song length
+df_songs_length = df_songs %>% 
+  mutate(len = sapply(strsplit(corp, " "), length))
+
+df_songs_length = df_songs_length %>%  
+  group_by(song_name) %>% 
+  summarise(leng = sum(len))
+
+song_length_plot = ggplot(df_songs_length, aes(x=reorder(song_name, leng), y = leng))
+song_length_plot + geom_bar(stat = 'identity') + 
+  coord_flip() + 
+  ggtitle("Song length by Song title") +
+  ylab("Length of Words") +
+  xlab("Song name")
+```
+
+
+### Most Frequent Words
+The most frequent words in the corpus were shown earlier. Here they are converted to a dataframe and plotted for better view of the data.
+
+```{r echo=FALSE}
+words_frequency <- colSums(as.matrix(tdm)) 
+
+ord <- order(words_frequency, decreasing=TRUE)
+words_frequency = words_frequency[head(ord, 20)] 
+words_frequency_df = data.frame(term = names(words_frequency), freq = words_frequency)
+
+# Plot most frequent words
+top_freq_plot = ggplot(words_frequency_df, aes(x=reorder(term, freq), y = freq)) 
+top_freq_plot + geom_bar(stat = 'identity') + coord_flip()
+```
+
+
+### WordCloud
+WordCloud are a novelty visual representation of text data. Tags are usually single words, and the importance of each tag is shown with font size or color.
+
+In this project the wordcloud is created on most frquent 100 words using the *wordcloud* package.
+
+```{r echo=FALSE}
+words_frequency <- colSums(as.matrix(tdm)) 
+
+ord <- order(words_frequency, decreasing=TRUE)
+words_frequency = words_frequency[head(ord, 100)] 
+words_frequency_df = data.frame(term = names(words_frequency), freq = words_frequency)
+
+# Wordcloud
+freq = data.frame(sort(colSums(as.matrix(tdm)), decreasing=TRUE))
+wordcloud(rownames(freq), freq[,1], max.words=100, colors=brewer.pal(1, "Dark2"))
+```
+
+
+### Plotting Bigrams and Trigrams
+Bigrams and Trigrams unlike unigrams(single words) show what two and three words occur together the most. This might be an important way to see the style of an artist's songs and whether they are likely to use some words together most of the times.
+
+Bigrams and Trigrams are achieved by creating a custom function *BiGramTokenizer* which performs *ngrams()* from the *RWeka* package. 
+
+```{r echo=FALSE}
+# Bigrams
+BigramTokenizer = function(x) {
+    unlist(lapply(ngrams(words(x), 2), paste, collapse = " "), use.names = FALSE)
+}
+
+corpusV = VCorpus(VectorSource(df_songs$corp))
+
+tdm_bi <- DocumentTermMatrix(corpusV, control = list(tokenize = BigramTokenizer))
+words_frequency <- colSums(as.matrix(tdm_bi)) 
+
+ord <- order(words_frequency, decreasing=TRUE)
+words_frequency = words_frequency[head(ord, 20)] 
+
+words_frequency_df = data.frame(term = names(words_frequency), freq = words_frequency)
+
+top_freq_plot_bi = ggplot(words_frequency_df, aes(x=reorder(term, freq), y = freq)) 
+top_freq_plot_bi + geom_bar(stat = 'identity') + 
+  coord_flip() +
+  ggtitle("Top 20 Bigrams") +
+  xlab("Bigrams") +
+  ylab("Frequency")
+
+# Trigrams
+TrigramTokenizer = function(x) {
+  unlist(lapply(ngrams(words(x), 3), paste, collapse = " "), use.names = FALSE)
+}
+
+tdm_tri <- DocumentTermMatrix(corpusV, control = list(tokenize = TrigramTokenizer))
+words_frequency <- colSums(as.matrix(tdm_tri)) 
+
+ord <- order(words_frequency, decreasing=TRUE)
+words_frequency = words_frequency[head(ord, 10)] 
+
+words_frequency_df = data.frame(term = names(words_frequency), freq = words_frequency)
+
+top_freq_plot_tri = ggplot(words_frequency_df, aes(x=reorder(term, freq), y = freq)) 
+top_freq_plot_tri + geom_bar(stat = 'identity') + 
+  coord_flip() +
+  ggtitle("Top 20 Trigrams") +
+  xlab("Trigrams") +
+  ylab("Frequency")
+```
+
+### References
+
+Removing special chars: https://intellipaat.com/community/15034/remove-all-special-characters-from-a-string-in-r
+
+Stemmer: https://cran.r-project.org/web/packages/corpus/vignettes/stemmer.html
+
+GeniusR: https://cran.r-project.org/web/packages/geniusr/geniusr.pdf
+
+Reordering ggplot: https://www.rpubs.com/dvdunne/reorder_ggplot_barchart_axis
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

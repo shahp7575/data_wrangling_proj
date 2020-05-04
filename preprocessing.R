@@ -10,6 +10,8 @@ rem_spec_char = function(x) {
 
 # function to remove stopwords
 stop = read.table("stop.txt", header = TRUE)
+stop = as.character(stop$CUSTOM_STOP_WORDS)
+stop = c(stopwords("english"), stop)
 stop_vec = as.vector(stop$CUSTOM_STOP_WORDS)
 my_stop_words = tibble(as.vector(stop$CUSTOM_STOP_WORDS), lexicon = "SMART")
 

@@ -6,19 +6,27 @@ install.packages('rvest')
 install.packages('textclean')
 install.packages('corpus')
 install.packages('tm')
+install.packages('RWeka')
+install.packages('ggplot2')
+install.packages('wordcloud')
 
 # loading libraries
 library(dplyr)
 library(devtools)
+library(wordcloud)
 library(tidytext)
+library(SnowballC)
+library(ggplot2)
 library(rvest)
 library(stringr)
 library(xml2)
 library(textclean)
+library(knitr)
 library(hunspell)
 library(corpus)
 library(stopwords)
 library(tm)
+library(RWeka)
 
 # installing dev version geniusr package
 devtools::install_github("ewenme/geniusr")
@@ -26,18 +34,18 @@ devtools::install_github("ewenme/geniusr")
 ## Setting genius api token to environment variables
 geniusr::genius_token()
 
-
-
 ## loading geniusr
 library(geniusr)
 
 ## get artist id using search_artist()
-search_artist(search_term = 'Jeremy')
+find_artist = search_artist(search_term = 'Jeremy')
 
 # get_lyrics test
 df = get_artist_songs_df(artist_id = "398381")
 
 # get song id
+find_song = get_lyrics_id(song_id = 3290674)
+
 get_song_lyrics = function(art_id) {
   
   # data frame of artist id
